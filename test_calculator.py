@@ -40,7 +40,7 @@ class TestCalculator(unittest.TestCase):
         print(f"-------------------------------------------------------------------")
         print(f"Test subtracting two negative numbers.")
         print(f"Input Values : -10 , -5")
-        print(f"Expected Output : -5")
+        print(f"Expected Output : -15")
         print(f"Actual Output : {result}")
         print(f"-------------------------------------------------------------------")
         self.assertEqual(result, -5)
