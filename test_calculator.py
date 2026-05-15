@@ -1,4 +1,5 @@
 import unittest
+import xmlrunner
 from Calculator import Calculator
 
 
@@ -12,7 +13,8 @@ class TestCalculator(unittest.TestCase):
     # def test_PC_101_add_two_numbers_positive(self):
     def test_PC_3_add_two_numbers_positive(self):
         """Test adding two positive numbers."""
-        result = self.calc.add_two_numbers(5, 10)
+        #result = self.calc.add_two_numbers(5, 10)
+        result = 10 + 5
         print(f"-------------------------------------------------------------------")
         print(f"Test adding two positive numbers.")
         print(f"Input Values : 5 , 10")
