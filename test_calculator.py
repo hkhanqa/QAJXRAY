@@ -21,7 +21,7 @@ class TestCalculator(unittest.TestCase):
         print(f"Expected Output : 15")
         print(f"Actual Output : {result}")
         print(f"-------------------------------------------------------------------")
-        self.assertEqual(result, 25)
+        self.assertEqual(result, 15)
     #---------------------------------------------------------------------------------
     def test_PC_4_add_three_numbers_positive(self):
         """Test adding three positive numbers."""
