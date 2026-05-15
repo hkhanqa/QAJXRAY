@@ -12,21 +12,49 @@ class TestCalculator(unittest.TestCase):
     def test_add_two_numbers_positive(self):
         """Test adding two positive numbers."""
         result = self.calc.add_two_numbers(5, 10)
+        print(f"-------------------------------------------------------------------")
+        print(f"Test adding two positive numbers.")
+        print(f"Input Values : 5 , 10")
+        print(f"Expected Output : 15")
+        print(f"Actual Output : {result}")
+        print(f"-------------------------------------------------------------------")
+        
+
         self.assertEqual(result, 15)
     #---------------------------------------------------------------------------------
     def test_add_three_numbers_positive(self):
         """Test adding three positive numbers."""
         result = self.calc.add_three_numbers(5, 10, 15)
+        print(f"-------------------------------------------------------------------")
+        print(f"Test adding three positive numbers.")
+        print(f"Input Values : 5 , 10 , 15")
+        print(f"Expected Output : 30")
+        print(f"Actual Output : {result}")
+        print(f"-------------------------------------------------------------------")
         self.assertEqual(result, 30)
     #---------------------------------------------------------------------------------
     def test_subtract_two_numbers_negative(self):
         """Test subtracting two negative numbers."""
-        result = self.calc.subtract_two_numbers(-20, -5)
-        self.assertEqual(result, -15)
+        result = self.calc.subtract_two_numbers(-10, -5)
+        #−10−(−5)=−5
+        print(f"-------------------------------------------------------------------")
+        print(f"Test subtracting two negative numbers.")
+        print(f"Input Values : -10 , -5")
+        print(f"Expected Output : -5")
+        print(f"Actual Output : {result}")
+        print(f"-------------------------------------------------------------------")
+        self.assertEqual(result, -5)
     #---------------------------------------------------------------------------------
     def test_subtract_three_numbers_negative(self):
         """Test subtracting three negative numbers."""
         result = self.calc.subtract_three_numbers(-30, -10, -5)
+        # −30−(−10)−(−5)  , −30+10+5=−15
+        print(f"-------------------------------------------------------------------")
+        print(f"Test subtracting three negative numbers.")
+        print(f"Input Values : -30 , -10 , -5")
+        print(f"Expected Output : -5")
+        print(f"Actual Output : {result}")
+        print(f"-------------------------------------------------------------------")
         self.assertEqual(result, -15)
     #---------------------------------------------------------------------------------
     # def test_add_two_numbers_negative(self):
