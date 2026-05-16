@@ -53,9 +53,9 @@ class TestSauceDemoLogin(unittest.TestCase):
         try:
             title = driver.find_element(By.CSS_SELECTOR, ".title").text
             self.assertEqual(title, "Products")
-            self.take_screenshot("PASS_valid_login")
+            self.take_screenshot("test_login_valid_credentials_PASS")
         except Exception:
-            self.take_screenshot("FAIL_valid_login")
+            self.take_screenshot("test_login_valid_credentials_FAIL")
             raise
 
     # =========================
@@ -73,9 +73,9 @@ class TestSauceDemoLogin(unittest.TestCase):
 
         try:
             self.assertIn("Username and password do not match", error)
-            self.take_screenshot("PASS_invalid_password")
+            self.take_screenshot("test_login_invalid_password_PASS")
         except Exception:
-            self.take_screenshot("FAIL_invalid_password")
+            self.take_screenshot("test_login_invalid_password_FAIL")
             raise
 
     # =========================
@@ -93,9 +93,9 @@ class TestSauceDemoLogin(unittest.TestCase):
 
         try:
             self.assertIn("locked", error.lower())
-            self.take_screenshot("PASS_locked_user")
+            self.take_screenshot("test_login_locked_user_PASS")
         except Exception:
-            self.take_screenshot("FAIL_locked_user")
+            self.take_screenshot("test_login_locked_user_FAIL")
             raise
 
     # =========================
@@ -111,9 +111,9 @@ class TestSauceDemoLogin(unittest.TestCase):
 
         try:
             self.assertTrue(len(error) > 0)
-            self.take_screenshot("PASS_empty_credentials")
+            self.take_screenshot("test_login_empty_credentials_PASS")
         except Exception:
-            self.take_screenshot("FAIL_empty_credentials")
+            self.take_screenshot("test_login_empty_credentials_FAIL")
             raise
 
     def tearDown(self):
