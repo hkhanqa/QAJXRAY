@@ -1,6 +1,7 @@
 import unittest
 import os
 from datetime import datetime
+import xmlrunner
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
