@@ -42,7 +42,7 @@ class TestSauceDemoLogin(unittest.TestCase):
     # =========================
     # ✅ POSITIVE TEST
     # =========================
-    def test_login_valid_credentials(self):
+    def test_XA_1_login_valid_credentials(self):
         driver = self.driver
         driver.get("https://www.saucedemo.com/")
 
@@ -61,7 +61,7 @@ class TestSauceDemoLogin(unittest.TestCase):
     # =========================
     # ❌ NEGATIVE TEST - wrong password
     # =========================
-    def test_login_invalid_password(self):
+    def test_XA_1_login_invalid_password(self):
         driver = self.driver
         driver.get("https://www.saucedemo.com/")
 
@@ -81,7 +81,7 @@ class TestSauceDemoLogin(unittest.TestCase):
     # =========================
     # ❌ NEGATIVE TEST - locked user
     # =========================
-    def test_login_locked_user(self):
+    def test_XA_1_login_locked_user(self):
         driver = self.driver
         driver.get("https://www.saucedemo.com/")
 
@@ -101,7 +101,7 @@ class TestSauceDemoLogin(unittest.TestCase):
     # =========================
     # ❌ NEGATIVE TEST - empty login
     # =========================
-    def test_login_empty_credentials(self):
+    def test_XA_1_login_empty_credentials(self):
         driver = self.driver
         driver.get("https://www.saucedemo.com/")
 
