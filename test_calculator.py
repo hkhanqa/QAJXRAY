@@ -11,7 +11,7 @@ class TestCalculator(unittest.TestCase):
         self.calc = Calculator()
     #---------------------------------------------------------------------------------
     # def test_PC_101_add_two_numbers_positive(self):
-    def test_PC_3_add_two_numbers_positive(self):
+    def test_XA_1_add_two_numbers_positive(self):
         """Test adding two positive numbers."""
         #result = self.calc.add_two_numbers(5, 10)
         result = 10 + 5
@@ -23,7 +23,7 @@ class TestCalculator(unittest.TestCase):
         print(f"-------------------------------------------------------------------")
         self.assertEqual(result, 30)
     #---------------------------------------------------------------------------------
-    def test_PC_4_add_three_numbers_positive(self):
+    def test_XA_1_add_three_numbers_positive(self):
         """Test adding three positive numbers."""
         result = self.calc.add_three_numbers(5, 10, 15)
         print(f"-------------------------------------------------------------------")
@@ -34,7 +34,7 @@ class TestCalculator(unittest.TestCase):
         print(f"-------------------------------------------------------------------")
         self.assertEqual(result, 30)
     #---------------------------------------------------------------------------------
-    def test_PC_11_subtract_two_numbers_negative(self):
+    def test_XA_1_subtract_two_numbers_negative(self):
         """Test subtracting two negative numbers."""
         result = self.calc.subtract_two_numbers(-10, -5)
         #−10−(−5)=−5
@@ -46,7 +46,7 @@ class TestCalculator(unittest.TestCase):
         print(f"-------------------------------------------------------------------")
         self.assertEqual(result, -5)
     #---------------------------------------------------------------------------------
-    def test_PC_12_subtract_three_numbers_negative(self):
+    def test_XA_1_subtract_three_numbers_negative(self):
         """Test subtracting three negative numbers."""
         result = self.calc.subtract_three_numbers(-30, -10, -5)
         # −30−(−10)−(−5)  , −30+10+5=−15
