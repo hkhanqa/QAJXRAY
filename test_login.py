@@ -125,5 +125,6 @@ class TestSauceDemoLogin(unittest.TestCase):
 # =========================
 if __name__ == "__main__":
     unittest.main(
-        testRunner=xmlrunner.XMLTestRunner(output="reports")
+          testRunner=xmlrunner.XMLTestRunner(output='reports'),
+        verbosity=2
     )
