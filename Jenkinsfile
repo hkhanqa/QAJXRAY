@@ -116,8 +116,9 @@ pipeline {
 
                             Write-Host "Checking if Test already exists EXACTLY: $name"
 
-                            # EXACT MATCH JQL (no duplicates)
-                            $jql = [uri]::EscapeDataString("summary = \"$name\" AND issuetype = Test")
+                            # EXACT MATCH JQL (PowerShell-safe quoting)
+                            $jqlString = "summary = `"$name`" AND issuetype = Test"
+                            $jql = [uri]::EscapeDataString($jqlString)
                             $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key"
 
                             $existingKey = $null
