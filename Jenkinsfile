@@ -1,17 +1,9 @@
 pipeline {
     agent any
 
-    parameters {
-        string(
-            name: 'STORY_KEY',
-            defaultValue: 'QA-38',
-            description: 'Jira Story key to link Test Set / Test Execution to (e.g. QA-38)'
-        )
-    }
-
     environment {
         JIRA_PROJECT_KEY = 'QA'
-        STORY_KEY        = "${params.STORY_KEY}"
+        STORY_KEY        = 'QA-38'
         JIRA_DOMAIN      = 'hykhan.atlassian.net'
     }
 
@@ -25,11 +17,7 @@ pipeline {
             steps {
                 powershell '''
                     $ProgressPreference = "SilentlyContinue"
-
-                    Invoke-WebRequest `
-                        -Uri "https://github.com/hkhanqa/QAJXRAY/archive/refs/heads/main.zip" `
-                        -OutFile "repo.zip"
-
+                    Invoke-WebRequest -Uri "https://github.com/hkhanqa/QAJXRAY/archive/refs/heads/main.zip" -OutFile "repo.zip"
                     Expand-Archive repo.zip -DestinationPath .
                     Move-Item QAJXRAY-main/* . -Force
                     Remove-Item repo.zip
@@ -65,17 +53,9 @@ pipeline {
         --------------------------------------------------------- */
         stage('Create Test Set') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'jira-creds',
-                        usernameVariable: 'JIRA_EMAIL',
-                        passwordVariable: 'JIRA_API_TOKEN'
-                    )
-                ]) {
+                withCredentials([usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN')]) {
                     powershell '''
-                        $auth = [Convert]::ToBase64String(
-                            [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                        )
+                        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
 
                         $body = @{
                             fields = @{
@@ -122,71 +102,64 @@ pipeline {
         }
 
         /* ---------------------------------------------------------
-           CREATE JIRA TESTS
+           CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
         stage('Create Jira Tests for Each Method') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'jira-creds',
-                usernameVariable: 'JIRA_EMAIL',
-                passwordVariable: 'JIRA_API_TOKEN'
-            )
-        ]) {
-            powershell '''
-                $auth = [Convert]::ToBase64String(
-                    [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                )
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN')]) {
+                    powershell '''
+                        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
+                        $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
+                        $keys  = @()
 
-                $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
-                $keys  = @()
+                        foreach ($name in $names) {
 
-                foreach ($name in $names) {
-                    if (-not $name) { continue }
+                            Write-Host "Checking if Test already exists EXACTLY: $name"
 
-                    Write-Host "Checking if Test already exists: $name"
+                            # EXACT MATCH JQL (no duplicates)
+                            $jql = [uri]::EscapeDataString("summary = \"$name\" AND issuetype = Test")
+                            $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key"
 
-                    $jql = [uri]::EscapeDataString("project=$env:JIRA_PROJECT_KEY AND summary~'$name' AND issuetype='Test'")
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key"
+                            $existingKey = $null
 
-                    try {
-                        $searchResp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
-                        if ($searchResp.issues.Count -gt 0) {
-                            $existingKey = $searchResp.issues[0].key
-                            Write-Host "Found existing Test: $existingKey"
-                            $keys += $existingKey
-                            continue
+                            try {
+                                $searchResp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
+                                if ($searchResp.issues.Count -gt 0) {
+                                    $existingKey = $searchResp.issues[0].key
+                                }
+                            } catch {}
+
+                            if ($existingKey) {
+                                Write-Host "Reusing existing Test: $existingKey"
+                                $keys += $existingKey
+                                continue
+                            }
+
+                            Write-Host "Creating NEW Test for: $name"
+
+                            $body = @{
+                                fields = @{
+                                    project   = @{ key = "$env:JIRA_PROJECT_KEY" }
+                                    summary   = $name
+                                    issuetype = @{ name = "Test" }
+                                }
+                            } | ConvertTo-Json -Depth 10
+
+                            $resp = Invoke-RestMethod `
+                                -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
+                                -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
+                                -Method Post `
+                                -Body $body
+
+                            $keys += $resp.key
                         }
-                    } catch {
-                        Write-Host "Search failed, will create new Test."
-                    }
 
-                    Write-Host "Creating new Test for: $name"
-
-                    $body = @{
-                        fields = @{
-                            project   = @{ key = "$env:JIRA_PROJECT_KEY" }
-                            summary   = $name
-                            issuetype = @{ name = "Test" }
-                        }
-                    } | ConvertTo-Json -Depth 10
-
-                    $resp = Invoke-RestMethod `
-                        -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
-                        -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
-                        -Method Post `
-                        -Body $body
-
-                    $keys += $resp.key
+                        ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
+                        Write-Host "Final Test Keys (deduped): $keys"
+                    '''
                 }
-
-                ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
-                Write-Host "Final Test Keys: $keys"
-            '''
+            }
         }
-    }
-}
-
 
         /* ---------------------------------------------------------
            ADD TESTS TO TEST SET
@@ -194,86 +167,30 @@ pipeline {
         stage('Add Tests to Test Set') {
             steps {
                 withCredentials([
-                    usernamePassword(
-                        credentialsId: 'jira-creds',
-                        usernameVariable: 'JIRA_EMAIL',
-                        passwordVariable: 'JIRA_API_TOKEN'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'xray-user-pass',
-                        usernameVariable: 'XRAY_CLIENT_ID',
-                        passwordVariable: 'XRAY_CLIENT_SECRET'
-                    )
+                    usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN'),
+                    usernamePassword(credentialsId: 'xray-user-pass', usernameVariable: 'XRAY_CLIENT_ID', passwordVariable: 'XRAY_CLIENT_SECRET')
                 ]) {
                     powershell '''
-
                         function Get-IssueId([string]$key) {
-
                             $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
-
-                            Write-Host "Resolving Jira ID for key: $key"
-                            Write-Host "GET $url"
-
-                            try {
-                                $resp = Invoke-RestMethod `
-                                    -Uri $url `
-                                    -Headers @{ Authorization = "Basic $jiraAuth" } `
-                                    -Method Get
-                                return $resp.id
-                            }
-                            catch {
-                                Write-Host "FAILED to resolve key: $key"
-                                if ($_.Exception.Response -ne $null) {
-                                    $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-                                    $body   = $reader.ReadToEnd()
-                                    Write-Host "Jira error body:"
-                                    Write-Host $body
-                                }
-                                throw
-                            }
+                            $resp = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Basic $jiraAuth" } -Method Get
+                            return $resp.id
                         }
 
                         $testSetKey = (Get-Content "testset.key").Trim()
                         $testKeys   = (Get-Content "detected_tests.key").Split(",") | ForEach-Object { $_.Trim() }
 
-                        Write-Host "=== Add Tests to Test Set ==="
-                        Write-Host "Test Set Key: $testSetKey"
-                        Write-Host "Test Keys: $($testKeys -join ', ')"
-
-                        # Jira auth
-                        $jiraAuth = [Convert]::ToBase64String(
-                            [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                        )
-
-                        # Convert keys → IDs
+                        $jiraAuth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
                         $testSetId = Get-IssueId $testSetKey
                         $testIds   = @()
-                        foreach ($k in $testKeys) {
-                            if ($k) { $testIds += (Get-IssueId $k) }
-                        }
+                        foreach ($k in $testKeys) { if ($k) { $testIds += (Get-IssueId $k) } }
 
-                        Write-Host "Test Set ID: $testSetId"
-                        Write-Host "Test IDs: $($testIds -join ', ')"
-
-                        # Xray auth
-                        $authBody = @{
-                            client_id     = "$env:XRAY_CLIENT_ID"
-                            client_secret = "$env:XRAY_CLIENT_SECRET"
-                        } | ConvertTo-Json
-
-                        Write-Host "Authenticating to Xray Cloud..."
-                        $token = Invoke-RestMethod `
-                            -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" `
-                            -Method Post `
-                            -Body $authBody `
-                            -ContentType "application/json"
-
+                        $authBody = @{ client_id = "$env:XRAY_CLIENT_ID"; client_secret = "$env:XRAY_CLIENT_SECRET" } | ConvertTo-Json
+                        $token = Invoke-RestMethod -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" -Method Post -Body $authBody -ContentType "application/json"
                         $token = $token.Replace('"','')
                         $headers = @{ Authorization = "Bearer $token" }
 
-                        # Build GraphQL mutation
                         $idsList = ($testIds | ForEach-Object { "`"$($_)`"" }) -join ","
-
                         $mutation = @"
 mutation {
   addTestsToTestSet(
@@ -284,21 +201,8 @@ mutation {
   }
 }
 "@
-
                         $body = @{ query = $mutation } | ConvertTo-Json
-
-                        Write-Host "Calling Xray GraphQL:"
-                        Write-Host $mutation
-
-                        $resp = Invoke-RestMethod `
-                            -Uri "https://xray.cloud.getxray.app/api/v2/graphql" `
-                            -Method Post `
-                            -Headers $headers `
-                            -Body $body `
-                            -ContentType "application/json"
-
-                        Write-Host "GraphQL response:"
-                        Write-Host $resp
+                        Invoke-RestMethod -Uri "https://xray.cloud.getxray.app/api/v2/graphql" -Method Post -Headers $headers -Body $body -ContentType "application/json"
                     '''
                 }
             }
@@ -309,18 +213,9 @@ mutation {
         --------------------------------------------------------- */
         stage('Create Test Execution') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'jira-creds',
-                        usernameVariable: 'JIRA_EMAIL',
-                        passwordVariable: 'JIRA_API_TOKEN'
-                    )
-                ]) {
+                withCredentials([usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN')]) {
                     powershell '''
-                        $auth = [Convert]::ToBase64String(
-                            [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                        )
-
+                        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
                         $body = @{
                             fields = @{
                                 project   = @{ key = "$env:JIRA_PROJECT_KEY" }
@@ -328,77 +223,44 @@ mutation {
                                 issuetype = @{ name = "Test Execution" }
                             }
                         } | ConvertTo-Json -Depth 10
-
-                        $resp = Invoke-RestMethod `
-                            -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
-                            -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
-                            -Method Post `
-                            -Body $body
-
+                        $resp = Invoke-RestMethod -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } -Method Post -Body $body
                         $resp.key | Out-File -FilePath "execution.key" -Encoding ascii -NoNewline
-                        Write-Host "Created Test Execution: $($resp.key)"
                     '''
                 }
             }
         }
 
         /* ---------------------------------------------------------
-           LINK TESTS → TEST EXECUTION (via IDs)
+           LINK TESTS TO TEST EXECUTION
         --------------------------------------------------------- */
-  stage('Link Tests to Test Execution') {
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'jira-creds',
-                usernameVariable: 'JIRA_EMAIL',
-                passwordVariable: 'JIRA_API_TOKEN'
-            ),
-            usernamePassword(
-                credentialsId: 'xray-user-pass',
-                usernameVariable: 'XRAY_CLIENT_ID',
-                passwordVariable: 'XRAY_CLIENT_SECRET'
-            )
-        ]) {
-            powershell '''
+        stage('Link Tests to Test Execution') {
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN'),
+                    usernamePassword(credentialsId: 'xray-user-pass', usernameVariable: 'XRAY_CLIENT_ID', passwordVariable: 'XRAY_CLIENT_SECRET')
+                ]) {
+                    powershell '''
+                        function Get-IssueId([string]$key) {
+                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+                            $resp = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Basic $jiraAuth" } -Method Get
+                            return $resp.id
+                        }
 
-                function Get-IssueId([string]$key) {
-                    $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
-                    $resp = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Basic $jiraAuth" } -Method Get
-                    return $resp.id
-                }
+                        $executionKey = (Get-Content "execution.key").Trim()
+                        $testKeys     = (Get-Content "detected_tests.key").Split(",") | ForEach-Object { $_.Trim() }
 
-                $executionKey = (Get-Content "execution.key").Trim()
-                $testKeys     = (Get-Content "detected_tests.key").Split(",") | ForEach-Object { $_.Trim() }
+                        $jiraAuth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
+                        $executionId = Get-IssueId $executionKey
+                        $testIds     = @()
+                        foreach ($k in $testKeys) { if ($k) { $testIds += (Get-IssueId $k) } }
 
-                # Jira auth
-                $jiraAuth = [Convert]::ToBase64String(
-                    [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                )
+                        $authBody = @{ client_id = "$env:XRAY_CLIENT_ID"; client_secret = "$env:XRAY_CLIENT_SECRET" } | ConvertTo-Json
+                        $token = Invoke-RestMethod -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" -Method Post -Body $authBody -ContentType "application/json"
+                        $token = $token.Replace('"','')
+                        $headers = @{ Authorization = "Bearer $token" }
 
-                $executionId = Get-IssueId $executionKey
-                $testIds     = @()
-                foreach ($k in $testKeys) {
-                    if ($k) { $testIds += (Get-IssueId $k) }
-                }
-
-                # Xray auth
-                $authBody = @{
-                    client_id     = "$env:XRAY_CLIENT_ID"
-                    client_secret = "$env:XRAY_CLIENT_SECRET"
-                } | ConvertTo-Json
-
-                $token = Invoke-RestMethod `
-                    -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" `
-                    -Method Post `
-                    -Body $authBody `
-                    -ContentType "application/json"
-
-                $token = $token.Replace('"','')
-                $headers = @{ Authorization = "Bearer $token" }
-
-                $idsList = ($testIds | ForEach-Object { "`"$($_)`"" }) -join ","
-
-                $mutation = @"
+                        $idsList = ($testIds | ForEach-Object { "`"$($_)`"" }) -join ","
+                        $mutation = @"
 mutation {
   addTestsToTestExecution(
     issueId: "$executionId",
@@ -408,54 +270,25 @@ mutation {
   }
 }
 "@
-
-                $body = @{ query = $mutation } | ConvertTo-Json
-
-                Write-Host "Calling Xray GraphQL:"
-                Write-Host $mutation
-
-                $resp = Invoke-RestMethod `
-                    -Uri "https://xray.cloud.getxray.app/api/v2/graphql" `
-                    -Method Post `
-                    -Headers $headers `
-                    -Body $body `
-                    -ContentType "application/json"
-
-                Write-Host $resp
-            '''
+                        $body = @{ query = $mutation } | ConvertTo-Json
+                        Invoke-RestMethod -Uri "https://xray.cloud.getxray.app/api/v2/graphql" -Method Post -Headers $headers -Body $body -ContentType "application/json"
+                    '''
+                }
+            }
         }
-    }
-}
-
-
 
         /* ---------------------------------------------------------
            UPLOAD RESULTS TO XRAY CLOUD
         --------------------------------------------------------- */
         stage('Upload Results to Xray Cloud') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'xray-user-pass',
-                        usernameVariable: 'XRAY_CLIENT_ID',
-                        passwordVariable: 'XRAY_CLIENT_SECRET'
-                    )
-                ]) {
+                withCredentials([usernamePassword(credentialsId: 'xray-user-pass', usernameVariable: 'XRAY_CLIENT_ID', passwordVariable: 'XRAY_CLIENT_SECRET')]) {
                     powershell '''
                         $file = Get-ChildItem "reports\\*.xml" | Select-Object -First 1
                         $executionKey = (Get-Content "execution.key").Trim()
 
-                        $authBody = @{
-                            client_id     = "$env:XRAY_CLIENT_ID"
-                            client_secret = "$env:XRAY_CLIENT_SECRET"
-                        } | ConvertTo-Json
-
-                        $token = Invoke-RestMethod `
-                            -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" `
-                            -Method Post `
-                            -Body $authBody `
-                            -ContentType "application/json"
-
+                        $authBody = @{ client_id = "$env:XRAY_CLIENT_ID"; client_secret = "$env:XRAY_CLIENT_SECRET" } | ConvertTo-Json
+                        $token = Invoke-RestMethod -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" -Method Post -Body $authBody -ContentType "application/json"
                         $token = $token.Replace('"','')
                         $headers = @{ Authorization = "Bearer $token" }
 
@@ -475,19 +308,11 @@ mutation {
         --------------------------------------------------------- */
         stage('Link Test Execution to Story') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'jira-creds',
-                        usernameVariable: 'JIRA_EMAIL',
-                        passwordVariable: 'JIRA_API_TOKEN'
-                    )
-                ]) {
+                withCredentials([usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN')]) {
                     powershell '''
                         $executionKey = (Get-Content "execution.key").Trim()
 
-                        $auth = [Convert]::ToBase64String(
-                            [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                        )
+                        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
 
                         $body = @{
                             type = @{ name = "Relates" }
