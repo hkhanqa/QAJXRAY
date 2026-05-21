@@ -128,15 +128,9 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
 
                     Write-Host "Resolving Jira Test for NAME: $name"
 
-                    # NEW Jira Cloud Search API (CHANGE-2046)
+                    # Jira Cloud ISSUE PICKER API (the only working search API)
                     $body = @{
-                        queries = @(
-                            @{
-                                query = @{
-                                    jql = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary ~ `"$name`""
-                                }
-                            }
-                        )
+                        query = $name
                     } | ConvertTo-Json -Depth 10
 
                     $headers = @{
@@ -145,7 +139,7 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
                         Accept         = "application/json"
                     }
 
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search/jql"
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/issue/picker"
 
                     try {
                         $resp = Invoke-RestMethod `
@@ -159,22 +153,22 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
                         throw $_
                     }
 
-                    # Extract issues from new API format
-                    $issues = $resp.results[0].issues
+                    # Extract issues
+                    $issues = $resp.sections[0].issues
 
                     if (-not $issues -or $issues.Count -eq 0) {
                         Write-Host "❌ ERROR: No Jira Test exists for name: $name"
                         throw "Missing Jira Test for name: $name. Creation is disabled to prevent duplicates."
                     }
 
-                    # Filter exact summary match
+                    # Exact summary match
                     $exact = $issues | Where-Object { $_.summary -eq $name }
 
                     if ($exact.Count -gt 0) {
                         $existingKey = $exact[0].key
                     }
                     else {
-                        # fallback: pick first match
+                        # fallback: first match
                         $existingKey = $issues[0].key
                     }
 
@@ -189,6 +183,7 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
         }
     }
 }
+
 
 
 
