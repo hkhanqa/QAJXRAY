@@ -124,53 +124,54 @@ pipeline {
                 foreach ($name in $names) {
                     if (-not $name) { continue }
 
-                    Write-Host "Checking if Test already exists EXACTLY: $name"
+                   Write-Host "Checking if Test already exists EXACTLY: $name"
 
-                    # Exact match JQL with safe quoting
-                    $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
-                    $jql = [uri]::EscapeDataString($jqlString)
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=100"
-
-                    $existingKey = $null
-
-                    try {
-                        $searchResp = Invoke-RestMethod `
-                            -Uri $searchUrl `
-                            -Headers @{ Authorization = "Basic $auth" } `
-                            -Method Get
-
-                        if ($searchResp.issues.Count -gt 0) {
-                            # Sort by created date → pick oldest canonical test
-                            $sorted = $searchResp.issues | Sort-Object { $_.fields.created }
-                            $existingKey = $sorted[0].key
-                        }
-                    } catch {
-                        Write-Host "Search failed, will create new Test."
+                # Exact match JQL with safe quoting
+                $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
+                $jql = [uri]::EscapeDataString($jqlString)
+                $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=200"
+                
+                $existingKey = $null
+                
+                try {
+                    $searchResp = Invoke-RestMethod `
+                        -Uri $searchUrl `
+                        -Headers @{ Authorization = "Basic $auth" } `
+                        -Method Get
+                
+                    if ($searchResp.issues.Count -gt 0) {
+                        # Sort by created date → pick the oldest canonical test
+                        $sorted = $searchResp.issues | Sort-Object { $_.fields.created }
+                        $existingKey = $sorted[0].key
                     }
-
-                    if ($existingKey) {
-                        Write-Host "Reusing existing Test: $existingKey"
-                        $keys += $existingKey
-                        continue
+                } catch {
+                    Write-Host "Search failed, will create new Test."
+                }
+                
+                if ($existingKey) {
+                    Write-Host "Reusing existing Test: $existingKey"
+                    $keys += $existingKey
+                    continue
+                }
+                
+                Write-Host "Creating NEW Test for: $name"
+                
+                $body = @{
+                    fields = @{
+                        project   = @{ key = "$env:JIRA_PROJECT_KEY" }
+                        summary   = $name
+                        issuetype = @{ name = "Test" }
                     }
+                } | ConvertTo-Json -Depth 10
+                
+                $resp = Invoke-RestMethod `
+                    -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
+                    -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
+                    -Method Post `
+                    -Body $body
+                
+                $keys += $resp.key
 
-                    Write-Host "Creating NEW Test for: $name"
-
-                    $body = @{
-                        fields = @{
-                            project   = @{ key = "$env:JIRA_PROJECT_KEY" }
-                            summary   = $name
-                            issuetype = @{ name = "Test" }
-                        }
-                    } | ConvertTo-Json -Depth 10
-
-                    $resp = Invoke-RestMethod `
-                        -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
-                        -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
-                        -Method Post `
-                        -Body $body
-
-                    $keys += $resp.key
                 }
 
                 ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
