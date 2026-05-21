@@ -104,7 +104,7 @@ pipeline {
         /* ---------------------------------------------------------
            CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
-        stage('Create Jira Tests for Each Method') {
+    stage('Create Jira Tests for Each Method') {
     steps {
         withCredentials([
             usernamePassword(
@@ -126,7 +126,7 @@ pipeline {
 
                     Write-Host "Checking if Test already exists EXACTLY: $name"
 
-                    # Exact match JQL with safe quoting
+                    # Exact match JQL with project and issue type
                     $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
                     $jql = [uri]::EscapeDataString($jqlString)
                     $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=50"
@@ -175,6 +175,7 @@ pipeline {
         }
     }
 }
+
 
         /* ---------------------------------------------------------
            ADD TESTS TO TEST SET
