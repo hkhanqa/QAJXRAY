@@ -104,7 +104,7 @@ pipeline {
         /* ---------------------------------------------------------
            CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
-  stage('Create Jira Tests for Each Method') {
+ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
     steps {
         withCredentials([
             usernamePassword(
@@ -114,6 +114,8 @@ pipeline {
             )
         ]) {
             powershell '''
+                $ErrorActionPreference = "Stop"
+
                 $auth = [Convert]::ToBase64String(
                     [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
                 )
@@ -124,58 +126,34 @@ pipeline {
                 foreach ($name in $names) {
                     if (-not $name) { continue }
 
-                   Write-Host "Checking if Test already exists EXACTLY: $name"
+                    Write-Host "Resolving Jira Test for NAME: $name"
 
-                # Exact match JQL with safe quoting
-                $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
-                $jql = [uri]::EscapeDataString($jqlString)
-                $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=200"
-                
-                $existingKey = $null
-                
-                try {
-                    $searchResp = Invoke-RestMethod `
+                    # Exact match JQL
+                    $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
+                    $jql = [uri]::EscapeDataString($jqlString)
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=200"
+
+                    $resp = Invoke-RestMethod `
                         -Uri $searchUrl `
                         -Headers @{ Authorization = "Basic $auth" } `
                         -Method Get
-                
-                    if ($searchResp.issues.Count -gt 0) {
-                        # Sort by created date → pick the oldest canonical test
-                        $sorted = $searchResp.issues | Sort-Object { $_.fields.created }
-                        $existingKey = $sorted[0].key
-                    }
-                } catch {
-                    Write-Host "Search failed, will create new Test."
-                }
-                
-                if ($existingKey) {
-                    Write-Host "Reusing existing Test: $existingKey"
-                    $keys += $existingKey
-                    continue
-                }
-                
-                Write-Host "Creating NEW Test for: $name"
-                
-                $body = @{
-                    fields = @{
-                        project   = @{ key = "$env:JIRA_PROJECT_KEY" }
-                        summary   = $name
-                        issuetype = @{ name = "Test" }
-                    }
-                } | ConvertTo-Json -Depth 10
-                
-                $resp = Invoke-RestMethod `
-                    -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
-                    -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
-                    -Method Post `
-                    -Body $body
-                
-                $keys += $resp.key
 
+                    if (-not $resp.issues -or $resp.issues.Count -eq 0) {
+                        Write-Host "❌ ERROR: No Jira Test exists for name: $name"
+                        throw "Missing Jira Test for name: $name. Creation is disabled to prevent duplicates."
+                    }
+
+                    # Pick the oldest existing test
+                    $sorted = $resp.issues | Sort-Object { $_.fields.created }
+                    $existingKey = $sorted[0].key
+
+                    Write-Host "✔ Using existing Jira Test: $existingKey for name: $name"
+
+                    $keys += $existingKey
                 }
 
                 ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
-                Write-Host "Final Test Keys (deduped): $keys"
+                Write-Host "Final Test Keys (strict reuse): $keys"
             '''
         }
     }
