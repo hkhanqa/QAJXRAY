@@ -66,7 +66,7 @@ pipeline {
                         } | ConvertTo-Json -Depth 10
 
                         $resp = Invoke-RestMethod `
-                            -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
+                            -Uri "https://$env:JIRA_DOMAIN/rest/api/latest/issue" `
                             -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
                             -Method Post `
                             -Body $body
@@ -173,7 +173,7 @@ pipeline {
                 ]) {
                     powershell '''
                         function Get-IssueId([string]$key) {
-                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/latest/issue/$($key)?fields=id"
                             $resp = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Basic $jiraAuth" } -Method Get
                             return $resp.id
                         }
@@ -224,7 +224,7 @@ mutation {
                                 issuetype = @{ name = "Test Execution" }
                             }
                         } | ConvertTo-Json -Depth 10
-                        $resp = Invoke-RestMethod -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } -Method Post -Body $body
+                        $resp = Invoke-RestMethod -Uri "https://$env:JIRA_DOMAIN/rest/api/latest/issue" -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } -Method Post -Body $body
                         $resp.key | Out-File -FilePath "execution.key" -Encoding ascii -NoNewline
                     '''
                 }
@@ -242,7 +242,7 @@ mutation {
                 ]) {
                     powershell '''
                         function Get-IssueId([string]$key) {
-                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/latest/issue/$($key)?fields=id"
                             $resp = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Basic $jiraAuth" } -Method Get
                             return $resp.id
                         }
@@ -322,7 +322,7 @@ mutation {
                         } | ConvertTo-Json -Depth 10
 
                         Invoke-RestMethod `
-                            -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issueLink" `
+                            -Uri "https://$env:JIRA_DOMAIN/rest/api/latest/issueLink" `
                             -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
                             -Method Post `
                             -Body $body
