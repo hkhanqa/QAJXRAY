@@ -128,8 +128,10 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
 
                     Write-Host "Resolving Jira Test for NAME: $name"
 
+                    # URL encode using WebUtility (works in Jenkins)
+                    $encoded = [System.Net.WebUtility]::UrlEncode($name)
+
                     # Jira Cloud ISSUE PICKER API (GET ONLY)
-                    $encoded = [System.Web.HttpUtility]::UrlEncode($name)
                     $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/issue/picker?query=$encoded"
 
                     try {
@@ -173,6 +175,7 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
         }
     }
 }
+
 
 
 
