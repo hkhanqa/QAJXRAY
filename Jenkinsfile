@@ -131,13 +131,15 @@ pipeline {
                     # Exact match JQL
                     $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
                     $jql = [uri]::EscapeDataString($jqlString)
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/latest/search?jql=$jql&fields=key,created&maxResults=200"
-
-
+                    
+                    # NEW Jira Cloud search endpoint (works even when /rest/api/3/search is disabled)
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/internal/search/issues?jql=$jql"
+                    
                     $resp = Invoke-RestMethod `
                         -Uri $searchUrl `
                         -Headers @{ Authorization = "Basic $auth" } `
                         -Method Get
+
 
                     if (-not $resp.issues -or $resp.issues.Count -eq 0) {
                         Write-Host "❌ ERROR: No Jira Test exists for name: $name"
