@@ -104,7 +104,7 @@ pipeline {
         /* ---------------------------------------------------------
            CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
-   stage('Create Jira Tests for Each Method') {
+  stage('Create Jira Tests for Each Method') {
     steps {
         withCredentials([
             usernamePassword(
