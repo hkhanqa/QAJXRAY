@@ -155,7 +155,7 @@ pipeline {
                         -Method Post `
                         -Body $body
 
-
+                    $issues = $resp.results[0].issues
 
 
                     if (-not $resp.issues -or $resp.issues.Count -eq 0) {
