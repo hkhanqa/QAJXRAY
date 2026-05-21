@@ -131,7 +131,8 @@ pipeline {
                     # Exact match JQL
                     $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
                     $jql = [uri]::EscapeDataString($jqlString)
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=200"
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/latest/search?jql=$jql&fields=key,created&maxResults=200"
+
 
                     $resp = Invoke-RestMethod `
                         -Uri $searchUrl `
