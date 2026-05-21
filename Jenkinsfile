@@ -133,7 +133,7 @@ pipeline {
                     $jql = [uri]::EscapeDataString($jqlString)
                     
                     # NEW Jira Cloud search endpoint (works even when /rest/api/3/search is disabled)
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/internal/search/issues?jql=$jql"
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/2/search?jql=$jql&fields=key,created&maxResults=200"
                     
                     $resp = Invoke-RestMethod `
                         -Uri $searchUrl `
