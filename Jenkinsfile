@@ -128,25 +128,15 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
 
                     Write-Host "Resolving Jira Test for NAME: $name"
 
-                    # Jira Cloud ISSUE PICKER API (the only working search API)
-                    $body = @{
-                        query = $name
-                    } | ConvertTo-Json -Depth 10
-
-                    $headers = @{
-                        Authorization  = "Basic $auth"
-                        "Content-Type" = "application/json"
-                        Accept         = "application/json"
-                    }
-
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/issue/picker"
+                    # Jira Cloud ISSUE PICKER API (GET ONLY)
+                    $encoded = [System.Web.HttpUtility]::UrlEncode($name)
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/issue/picker?query=$encoded"
 
                     try {
                         $resp = Invoke-RestMethod `
                             -Uri $searchUrl `
-                            -Headers $headers `
-                            -Method Post `
-                            -Body $body
+                            -Headers @{ Authorization = "Basic $auth" } `
+                            -Method Get
                     }
                     catch {
                         Write-Host "❌ Jira search failed for: $name"
@@ -183,6 +173,7 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
         }
     }
 }
+
 
 
 
