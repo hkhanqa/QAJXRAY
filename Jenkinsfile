@@ -130,19 +130,31 @@ pipeline {
 
                     # Exact match JQL
                     $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
-                    $jql = [uri]::EscapeDataString($jqlString)
+
+                    $body = @{
+                        queries = @(
+                            @{
+                                jql        = $jqlString
+                                startAt    = 0
+                                maxResults = 200
+                            }
+                        )
+                    } | ConvertTo-Json -Depth 10
                     
                     $headers = @{
                         Authorization       = "Basic $auth"
-                        "X-Atlassian-Token" = "no-check"
+                        "Content-Type"      = "application/json"
+                        "Accept"            = "application/json"
                     }
                     
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/2/search?jql=$jql&fields=key,created&maxResults=200"
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search/jql"
                     
                     $resp = Invoke-RestMethod `
                         -Uri $searchUrl `
                         -Headers $headers `
-                        -Method Get
+                        -Method Post `
+                        -Body $body
+
 
 
 
