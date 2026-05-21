@@ -104,7 +104,7 @@ pipeline {
         /* ---------------------------------------------------------
            CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
- stage('Resolve Jira Tests By Name (No Creation Allowed)') {
+stage('Resolve Jira Tests By Name (No Creation Allowed)') {
     steps {
         withCredentials([
             usernamePassword(
@@ -128,45 +128,55 @@ pipeline {
 
                     Write-Host "Resolving Jira Test for NAME: $name"
 
-                    # Exact match JQL
-                   $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary ~ `"$name`""
-
+                    # NEW Jira Cloud Search API (CHANGE-2046)
                     $body = @{
                         queries = @(
                             @{
                                 query = @{
-                                    jql = $jqlString
+                                    jql = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary ~ `"$name`""
                                 }
                             }
                         )
                     } | ConvertTo-Json -Depth 10
-                    
+
                     $headers = @{
                         Authorization  = "Basic $auth"
                         "Content-Type" = "application/json"
                         Accept         = "application/json"
                     }
-                    
+
                     $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search/jql"
-                    
-                    $resp = Invoke-RestMethod `
-                        -Uri $searchUrl `
-                        -Headers $headers `
-                        -Method Post `
-                        -Body $body
-                    
+
+                    try {
+                        $resp = Invoke-RestMethod `
+                            -Uri $searchUrl `
+                            -Headers $headers `
+                            -Method Post `
+                            -Body $body
+                    }
+                    catch {
+                        Write-Host "❌ Jira search failed for: $name"
+                        throw $_
+                    }
+
+                    # Extract issues from new API format
                     $issues = $resp.results[0].issues
 
-
-
-                    if (-not $resp.issues -or $resp.issues.Count -eq 0) {
+                    if (-not $issues -or $issues.Count -eq 0) {
                         Write-Host "❌ ERROR: No Jira Test exists for name: $name"
                         throw "Missing Jira Test for name: $name. Creation is disabled to prevent duplicates."
                     }
 
-                    # Pick the oldest existing test
-                    $sorted = $resp.issues | Sort-Object { $_.fields.created }
-                    $existingKey = $sorted[0].key
+                    # Filter exact summary match
+                    $exact = $issues | Where-Object { $_.summary -eq $name }
+
+                    if ($exact.Count -gt 0) {
+                        $existingKey = $exact[0].key
+                    }
+                    else {
+                        # fallback: pick first match
+                        $existingKey = $issues[0].key
+                    }
 
                     Write-Host "✔ Using existing Jira Test: $existingKey for name: $name"
 
@@ -179,6 +189,7 @@ pipeline {
         }
     }
 }
+
 
 
 
