@@ -132,13 +132,18 @@ pipeline {
                     $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
                     $jql = [uri]::EscapeDataString($jqlString)
                     
-                    # NEW Jira Cloud search endpoint (works even when /rest/api/3/search is disabled)
+                    $headers = @{
+                        Authorization       = "Basic $auth"
+                        "X-Atlassian-Token" = "no-check"
+                    }
+                    
                     $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/2/search?jql=$jql&fields=key,created&maxResults=200"
                     
                     $resp = Invoke-RestMethod `
                         -Uri $searchUrl `
-                        -Headers @{ Authorization = "Basic $auth" } `
+                        -Headers $headers `
                         -Method Get
+
 
 
                     if (-not $resp.issues -or $resp.issues.Count -eq 0) {
