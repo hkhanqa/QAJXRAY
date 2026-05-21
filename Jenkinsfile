@@ -163,7 +163,7 @@ pipeline {
         }
 
         /* ---------------------------------------------------------
-           ADD TESTS TO TEST SET (GRAPHQL)
+           ADD TESTS TO TEST SET (FIXED)
         --------------------------------------------------------- */
         stage('Add Tests to Test Set') {
             steps {
@@ -182,9 +182,12 @@ pipeline {
                     powershell '''
 
                         function Get-IssueId([string]$key) {
-                            $url = "https://$env:JIRA_DOMAIN/rest/api/3/issue/$key?fields=id"
+
+                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+
                             Write-Host "Resolving Jira ID for key: $key"
                             Write-Host "GET $url"
+
                             try {
                                 $resp = Invoke-RestMethod `
                                     -Uri $url `
@@ -261,27 +264,15 @@ mutation {
                         Write-Host "Calling Xray GraphQL:"
                         Write-Host $mutation
 
-                        try {
-                            $resp = Invoke-RestMethod `
-                                -Uri "https://xray.cloud.getxray.app/api/v2/graphql" `
-                                -Method Post `
-                                -Headers $headers `
-                                -Body $body `
-                                -ContentType "application/json"
+                        $resp = Invoke-RestMethod `
+                            -Uri "https://xray.cloud.getxray.app/api/v2/graphql" `
+                            -Method Post `
+                            -Headers $headers `
+                            -Body $body `
+                            -ContentType "application/json"
 
-                            Write-Host "GraphQL response:"
-                            Write-Host $resp
-                        }
-                        catch {
-                            Write-Host "GraphQL call FAILED"
-                            if ($_.Exception.Response -ne $null) {
-                                $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-                                $bodyErr   = $reader.ReadToEnd()
-                                Write-Host "Xray error body:"
-                                Write-Host $bodyErr
-                            }
-                            throw
-                        }
+                        Write-Host "GraphQL response:"
+                        Write-Host $resp
                     '''
                 }
             }
@@ -326,7 +317,7 @@ mutation {
         }
 
         /* ---------------------------------------------------------
-           LINK TEST SET → TEST EXECUTION (GRAPHQL)
+           LINK TEST SET → TEST EXECUTION (FIXED)
         --------------------------------------------------------- */
         stage('Link Test Set to Test Execution') {
             steps {
@@ -345,13 +336,17 @@ mutation {
                     powershell '''
 
                         function Get-IssueId([string]$key) {
-                            $url = "https://$env:JIRA_DOMAIN/rest/api/3/issue/$key?fields=id"
+
+                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+
                             Write-Host "Resolving Jira ID for key: $key"
                             Write-Host "GET $url"
+
                             $resp = Invoke-RestMethod `
                                 -Uri $url `
                                 -Headers @{ Authorization = "Basic $jiraAuth" } `
                                 -Method Get
+
                             return $resp.id
                         }
 
