@@ -146,7 +146,7 @@ pipeline {
 
                     Write-Host "Checking if Test already exists: $name"
 
-                    $jql = [System.Web.HttpUtility]::UrlEncode("project=$env:JIRA_PROJECT_KEY AND summary~'$name' AND issuetype='Test'")
+                    $jql = [uri]::EscapeDataString("project=$env:JIRA_PROJECT_KEY AND summary~'$name' AND issuetype='Test'")
                     $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key"
 
                     try {
