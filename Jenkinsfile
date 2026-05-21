@@ -327,69 +327,60 @@ mutation {
         /* ---------------------------------------------------------
            LINK TESTS → TEST EXECUTION (via IDs)
         --------------------------------------------------------- */
-        stage('Link Tests to Test Execution') {
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'jira-creds',
-                        usernameVariable: 'JIRA_EMAIL',
-                        passwordVariable: 'JIRA_API_TOKEN'
-                    ),
-                    usernamePassword(
-                        credentialsId: 'xray-user-pass',
-                        usernameVariable: 'XRAY_CLIENT_ID',
-                        passwordVariable: 'XRAY_CLIENT_SECRET'
-                    )
-                ]) {
-                    powershell '''
+      stage('Link Tests to Test Execution') {
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'jira-creds',
+                usernameVariable: 'JIRA_EMAIL',
+                passwordVariable: 'JIRA_API_TOKEN'
+            ),
+            usernamePassword(
+                credentialsId: 'xray-user-pass',
+                usernameVariable: 'XRAY_CLIENT_ID',
+                passwordVariable: 'XRAY_CLIENT_SECRET'
+            )
+        ]) {
+            powershell '''
 
-                        function Get-IssueId([string]$key) {
+                function Get-IssueId([string]$key) {
+                    $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+                    $resp = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Basic $jiraAuth" } -Method Get
+                    return $resp.id
+                }
 
-                            $url = "https://$($env:JIRA_DOMAIN)/rest/api/3/issue/$($key)?fields=id"
+                $executionKey = (Get-Content "execution.key").Trim()
+                $testKeys     = (Get-Content "detected_tests.key").Split(",") | ForEach-Object { $_.Trim() }
 
-                            Write-Host "Resolving Jira ID for key: $key"
-                            Write-Host "GET $url"
+                # Jira auth
+                $jiraAuth = [Convert]::ToBase64String(
+                    [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
+                )
 
-                            $resp = Invoke-RestMethod `
-                                -Uri $url `
-                                -Headers @{ Authorization = "Basic $jiraAuth" } `
-                                -Method Get
+                $executionId = Get-IssueId $executionKey
+                $testIds     = @()
+                foreach ($k in $testKeys) {
+                    if ($k) { $testIds += (Get-IssueId $k) }
+                }
 
-                            return $resp.id
-                        }
+                # Xray auth
+                $authBody = @{
+                    client_id     = "$env:XRAY_CLIENT_ID"
+                    client_secret = "$env:XRAY_CLIENT_SECRET"
+                } | ConvertTo-Json
 
-                        $executionKey = (Get-Content "execution.key").Trim()
-                        $testKeys     = (Get-Content "detected_tests.key").Split(",") | ForEach-Object { $_.Trim() }
+                $token = Invoke-RestMethod `
+                    -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" `
+                    -Method Post `
+                    -Body $authBody `
+                    -ContentType "application/json"
 
-                        # Jira auth
-                        $jiraAuth = [Convert]::ToBase64String(
-                            [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                        )
+                $token = $token.Replace('"','')
+                $headers = @{ Authorization = "Bearer $token" }
 
-                        $executionId = Get-IssueId $executionKey
-                        $testIds     = @()
-                        foreach ($k in $testKeys) {
-                            if ($k) { $testIds += (Get-IssueId $k) }
-                        }
+                $idsList = ($testIds | ForEach-Object { "`"$($_)`"" }) -join ","
 
-                        # Xray auth
-                        $authBody = @{
-                            client_id     = "$env:XRAY_CLIENT_ID"
-                            client_secret = "$env:XRAY_CLIENT_SECRET"
-                        } | ConvertTo-Json
-
-                        $token = Invoke-RestMethod `
-                            -Uri "https://xray.cloud.getxray.app/api/v2/authenticate" `
-                            -Method Post `
-                            -Body $authBody `
-                            -ContentType "application/json"
-
-                        $token = $token.Replace('"','')
-                        $headers = @{ Authorization = "Bearer $token" }
-
-                        $idsList = ($testIds | ForEach-Object { "`"$($_)`"" }) -join ","
-
-                        $mutation = @"
+                $mutation = @"
 mutation {
   addTestsToTestExecution(
     issueId: "$executionId",
@@ -400,23 +391,24 @@ mutation {
 }
 "@
 
-                        $body = @{ query = $mutation } | ConvertTo-Json
+                $body = @{ query = $mutation } | ConvertTo-Json
 
-                        Write-Host "Calling Xray GraphQL:"
-                        Write-Host $mutation
+                Write-Host "Calling Xray GraphQL:"
+                Write-Host $mutation
 
-                        $resp = Invoke-RestMethod `
-                            -Uri "https://xray.cloud.getxray.app/api/v2/graphql" `
-                            -Method Post `
-                            -Headers $headers `
-                            -Body $body `
-                            -ContentType "application/json"
+                $resp = Invoke-RestMethod `
+                    -Uri "https://xray.cloud.getxray.app/api/v2/graphql" `
+                    -Method Post `
+                    -Headers $headers `
+                    -Body $body `
+                    -ContentType "application/json"
 
-                        Write-Host $resp
-                    '''
-                }
-            }
+                Write-Host $resp
+            '''
         }
+    }
+}
+
 
         /* ---------------------------------------------------------
            UPLOAD RESULTS TO XRAY CLOUD
