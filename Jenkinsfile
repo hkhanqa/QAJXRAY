@@ -115,57 +115,36 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
         ]) {
             powershell '''
                 $ErrorActionPreference = "Stop"
-
-                $auth = [Convert]::ToBase64String(
-                    [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                )
-
+                $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
                 $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
                 $keys  = @()
 
                 foreach ($name in $names) {
                     if (-not $name) { continue }
-
                     Write-Host "Resolving Jira Test for NAME: $name"
 
-                    # URL encode using WebUtility (works in Jenkins)
-                    $encoded = [System.Net.WebUtility]::UrlEncode($name)
-
-                    # Jira Cloud ISSUE PICKER API (GET ONLY)
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/issue/picker?query=$encoded"
+                    # Use GET JQL search (works on all tenants)
+                    $encodedJql = [System.Net.WebUtility]::UrlEncode("project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary ~ `"$name`"")
+                    $searchUrl  = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$encodedJql&fields=key,summary,created&maxResults=50"
 
                     try {
-                        $resp = Invoke-RestMethod `
-                            -Uri $searchUrl `
-                            -Headers @{ Authorization = "Basic $auth" } `
-                            -Method Get
+                        $resp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
                     }
                     catch {
                         Write-Host "❌ Jira search failed for: $name"
                         throw $_
                     }
 
-                    # Extract issues
-                    $issues = $resp.sections[0].issues
-
+                    $issues = $resp.issues
                     if (-not $issues -or $issues.Count -eq 0) {
                         Write-Host "❌ ERROR: No Jira Test exists for name: $name"
                         throw "Missing Jira Test for name: $name. Creation is disabled to prevent duplicates."
                     }
 
-                    # Exact summary match
-                    $exact = $issues | Where-Object { $_.summary -eq $name }
-
-                    if ($exact.Count -gt 0) {
-                        $existingKey = $exact[0].key
-                    }
-                    else {
-                        # fallback: first match
-                        $existingKey = $issues[0].key
-                    }
-
+                    # Pick the oldest existing test
+                    $sorted = $issues | Sort-Object { $_.fields.created }
+                    $existingKey = $sorted[0].key
                     Write-Host "✔ Using existing Jira Test: $existingKey for name: $name"
-
                     $keys += $existingKey
                 }
 
@@ -175,6 +154,7 @@ stage('Resolve Jira Tests By Name (No Creation Allowed)') {
         }
     }
 }
+
 
 
 
