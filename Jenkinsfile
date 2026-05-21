@@ -129,22 +129,22 @@ pipeline {
                     Write-Host "Resolving Jira Test for NAME: $name"
 
                     # Exact match JQL
-                    $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
+                   $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary ~ `"$name`""
 
                     $body = @{
                         queries = @(
                             @{
-                                jql        = $jqlString
-                                startAt    = 0
-                                maxResults = 200
+                                query = @{
+                                    jql = $jqlString
+                                }
                             }
                         )
                     } | ConvertTo-Json -Depth 10
                     
                     $headers = @{
-                        Authorization       = "Basic $auth"
-                        "Content-Type"      = "application/json"
-                        "Accept"            = "application/json"
+                        Authorization  = "Basic $auth"
+                        "Content-Type" = "application/json"
+                        Accept         = "application/json"
                     }
                     
                     $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search/jql"
@@ -154,8 +154,9 @@ pipeline {
                         -Headers $headers `
                         -Method Post `
                         -Body $body
-
+                    
                     $issues = $resp.results[0].issues
+
 
 
                     if (-not $resp.issues -or $resp.issues.Count -eq 0) {
