@@ -105,62 +105,76 @@ pipeline {
            CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
         stage('Create Jira Tests for Each Method') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'jira-creds', usernameVariable: 'JIRA_EMAIL', passwordVariable: 'JIRA_API_TOKEN')]) {
-                    powershell '''
-                        $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN"))
-                        $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
-                        $keys  = @()
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'jira-creds',
+                usernameVariable: 'JIRA_EMAIL',
+                passwordVariable: 'JIRA_API_TOKEN'
+            )
+        ]) {
+            powershell '''
+                $auth = [Convert]::ToBase64String(
+                    [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
+                )
 
-                        foreach ($name in $names) {
+                $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
+                $keys  = @()
 
-                            Write-Host "Checking if Test already exists EXACTLY: $name"
+                foreach ($name in $names) {
+                    if (-not $name) { continue }
 
-                            # EXACT MATCH JQL (PowerShell-safe quoting)
-                            $jqlString = "summary = `"$name`" AND issuetype = Test"
-                            $jql = [uri]::EscapeDataString($jqlString)
-                            $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key"
+                    Write-Host "Checking if Test already exists EXACTLY: $name"
 
-                            $existingKey = $null
+                    # Exact match JQL with safe quoting
+                    $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
+                    $jql = [uri]::EscapeDataString($jqlString)
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=50"
 
-                            try {
-                                $searchResp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
-                                if ($searchResp.issues.Count -gt 0) {
-                                    $existingKey = $searchResp.issues[0].key
-                                }
-                            } catch {}
+                    $existingKey = $null
 
-                            if ($existingKey) {
-                                Write-Host "Reusing existing Test: $existingKey"
-                                $keys += $existingKey
-                                continue
-                            }
-
-                            Write-Host "Creating NEW Test for: $name"
-
-                            $body = @{
-                                fields = @{
-                                    project   = @{ key = "$env:JIRA_PROJECT_KEY" }
-                                    summary   = $name
-                                    issuetype = @{ name = "Test" }
-                                }
-                            } | ConvertTo-Json -Depth 10
-
-                            $resp = Invoke-RestMethod `
-                                -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
-                                -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
-                                -Method Post `
-                                -Body $body
-
-                            $keys += $resp.key
+                    try {
+                        $searchResp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
+                        if ($searchResp.issues.Count -gt 0) {
+                            # Sort by created date → pick oldest canonical test
+                            $sorted = $searchResp.issues | Sort-Object { $_.fields.created }
+                            $existingKey = $sorted[0].key
                         }
+                    } catch {
+                        Write-Host "Search failed, will create new Test."
+                    }
 
-                        ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
-                        Write-Host "Final Test Keys (deduped): $keys"
-                    '''
+                    if ($existingKey) {
+                        Write-Host "Reusing existing Test: $existingKey"
+                        $keys += $existingKey
+                        continue
+                    }
+
+                    Write-Host "Creating NEW Test for: $name"
+
+                    $body = @{
+                        fields = @{
+                            project   = @{ key = "$env:JIRA_PROJECT_KEY" }
+                            summary   = $name
+                            issuetype = @{ name = "Test" }
+                        }
+                    } | ConvertTo-Json -Depth 10
+
+                    $resp = Invoke-RestMethod `
+                        -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
+                        -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
+                        -Method Post `
+                        -Body $body
+
+                    $keys += $resp.key
                 }
-            }
+
+                ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
+                Write-Host "Final Test Keys (deduped): $keys"
+            '''
         }
+    }
+}
 
         /* ---------------------------------------------------------
            ADD TESTS TO TEST SET
