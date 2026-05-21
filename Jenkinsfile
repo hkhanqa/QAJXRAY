@@ -246,7 +246,7 @@ pipeline {
                         $headers = @{ Authorization = "Bearer $token" }
 
                         # Build GraphQL mutation
-                        $idsList = $testIds | ForEach-Object { "`"$($_)`"" } -join ","
+                        $idsList = ($testIds | ForEach-Object { "`"$($_)`"" }) -join ","
 
                         $mutation = @"
 mutation {
