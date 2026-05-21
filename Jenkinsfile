@@ -104,7 +104,7 @@ pipeline {
         /* ---------------------------------------------------------
            CREATE OR REUSE JIRA TESTS (NO DUPLICATES)
         --------------------------------------------------------- */
-    stage('Create Jira Tests for Each Method') {
+   stage('Create Jira Tests for Each Method') {
     steps {
         withCredentials([
             usernamePassword(
@@ -126,15 +126,19 @@ pipeline {
 
                     Write-Host "Checking if Test already exists EXACTLY: $name"
 
-                    # Exact match JQL with project and issue type
+                    # Exact match JQL with safe quoting
                     $jqlString = "project = $env:JIRA_PROJECT_KEY AND issuetype = Test AND summary = `"$name`""
                     $jql = [uri]::EscapeDataString($jqlString)
-                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=50"
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key,created&maxResults=100"
 
                     $existingKey = $null
 
                     try {
-                        $searchResp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
+                        $searchResp = Invoke-RestMethod `
+                            -Uri $searchUrl `
+                            -Headers @{ Authorization = "Basic $auth" } `
+                            -Method Get
+
                         if ($searchResp.issues.Count -gt 0) {
                             # Sort by created date → pick oldest canonical test
                             $sorted = $searchResp.issues | Sort-Object { $_.fields.created }
@@ -175,6 +179,7 @@ pipeline {
         }
     }
 }
+
 
 
         /* ---------------------------------------------------------
