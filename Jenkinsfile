@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         JIRA_PROJECT_KEY = 'QA'
-        STORY_KEY        = 'QA-1'
+        STORY_KEY        = 'QA-38'
         JIRA_DOMAIN      = 'hykhan.atlassian.net'
     }
 
