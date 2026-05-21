@@ -125,50 +125,68 @@ pipeline {
            CREATE JIRA TESTS
         --------------------------------------------------------- */
         stage('Create Jira Tests for Each Method') {
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'jira-creds',
-                        usernameVariable: 'JIRA_EMAIL',
-                        passwordVariable: 'JIRA_API_TOKEN'
-                    )
-                ]) {
-                    powershell '''
-                        $auth = [Convert]::ToBase64String(
-                            [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
-                        )
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'jira-creds',
+                usernameVariable: 'JIRA_EMAIL',
+                passwordVariable: 'JIRA_API_TOKEN'
+            )
+        ]) {
+            powershell '''
+                $auth = [Convert]::ToBase64String(
+                    [Text.Encoding]::ASCII.GetBytes("$env:JIRA_EMAIL`:$env:JIRA_API_TOKEN")
+                )
 
-                        $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
-                        $keys  = @()
+                $names = (Get-Content "detected_tests.name").Split(",") | ForEach-Object { $_.Trim() }
+                $keys  = @()
 
-                        foreach ($name in $names) {
-                            if (-not $name) { continue }
+                foreach ($name in $names) {
+                    if (-not $name) { continue }
 
-                            Write-Host "Creating Test for: $name"
+                    Write-Host "Checking if Test already exists: $name"
 
-                            $body = @{
-                                fields = @{
-                                    project   = @{ key = "$env:JIRA_PROJECT_KEY" }
-                                    summary   = $name
-                                    issuetype = @{ name = "Test" }
-                                }
-                            } | ConvertTo-Json -Depth 10
+                    $jql = [System.Web.HttpUtility]::UrlEncode("project=$env:JIRA_PROJECT_KEY AND summary~'$name' AND issuetype='Test'")
+                    $searchUrl = "https://$env:JIRA_DOMAIN/rest/api/3/search?jql=$jql&fields=key"
 
-                            $resp = Invoke-RestMethod `
-                                -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
-                                -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
-                                -Method Post `
-                                -Body $body
-
-                            $keys += $resp.key
+                    try {
+                        $searchResp = Invoke-RestMethod -Uri $searchUrl -Headers @{ Authorization = "Basic $auth" } -Method Get
+                        if ($searchResp.issues.Count -gt 0) {
+                            $existingKey = $searchResp.issues[0].key
+                            Write-Host "Found existing Test: $existingKey"
+                            $keys += $existingKey
+                            continue
                         }
+                    } catch {
+                        Write-Host "Search failed, will create new Test."
+                    }
 
-                        ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
-                        Write-Host "Created Test Keys: $keys"
-                    '''
+                    Write-Host "Creating new Test for: $name"
+
+                    $body = @{
+                        fields = @{
+                            project   = @{ key = "$env:JIRA_PROJECT_KEY" }
+                            summary   = $name
+                            issuetype = @{ name = "Test" }
+                        }
+                    } | ConvertTo-Json -Depth 10
+
+                    $resp = Invoke-RestMethod `
+                        -Uri "https://$env:JIRA_DOMAIN/rest/api/3/issue" `
+                        -Headers @{ Authorization = "Basic $auth"; "Content-Type"="application/json" } `
+                        -Method Post `
+                        -Body $body
+
+                    $keys += $resp.key
                 }
-            }
+
+                ($keys -join ",") | Out-File -FilePath "detected_tests.key" -Encoding ascii -NoNewline
+                Write-Host "Final Test Keys: $keys"
+            '''
         }
+    }
+}
+
 
         /* ---------------------------------------------------------
            ADD TESTS TO TEST SET
